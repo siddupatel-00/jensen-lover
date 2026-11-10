@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>jensen</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #000;
+      cursor: crosshair;
+      user-select: none;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+    #video {
+      position: fixed;
+      top: -9999px;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      opacity: 0.01;
+      pointer-events: none;
+    }
+    #audio {
+      display: none;
+    }
+    #autoplay-prompt {
+      display: none;
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(18, 18, 18, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 12px 24px;
+      border-radius: 999px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      z-index: 9999;
+      pointer-events: none;
+      animation: pulse 2s infinite ease-in-out;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.9; transform: translateX(-50%) scale(1); }
+      50% { opacity: 1; transform: translateX(-50%) scale(1.03); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Video muted so frame decoding never pauses -->
+  <video id="video" src="jensen-video-hd.mp4" autoplay loop muted playsinline webkit-playsinline></video>
+  
+  <!-- Song pre-trimmed to start directly at 20s with byte-0 delivery -->
+  <audio id="audio" src="song_from_20s.mp3" autoplay loop preload="auto"></audio>
+  
+  <canvas id="canvas"></canvas>
+
+  <div id="autoplay-prompt">🔊 Click anywhere to start audio</div>
+
+  <script>
+    const video = document.getElementById('video');
+    const audio = document.getElementById('audio');
+    const canvas = document.getElementById('canvas');
+    const promptEl = document.getElementById('autoplay-prompt');
+    const ctx = canvas.getContext('2d');
+
+    audio.muted = false;
+    audio.volume = 1.0;
+
+    let isAudioPlaying = false;
+
+    function startPlayback() {
+      if (video.paused) {
+        video.play().catch(() => {});
+      }
+
+      if (isAudioPlaying && !audio.paused) {
+        if (promptEl) promptEl.style.display = 'none';
+        return;
+      }
+
+      const p = audio.play();
+      if (p !== undefined) {
+        p.then(() => {
+          isAudioPlaying = true;
+          if (promptEl) promptEl.style.display = 'none';
+        }).catch((err) => {
+          // If browser Autoplay policy blocks unmuted audio on load, show helpful prompt
+          isAudioPlaying = false;
+          if (promptEl) promptEl.style.display = 'block';
+        });
+      }
+    }
+
+    // Try starting automatically on page load
+    startPlayback();
+    window.addEventListener('DOMContentLoaded', startPlayback);
+    window.addEventListener('load', startPlayback);
+
+    // Clicking or pressing anywhere activates audio instantly
+    ['pointerdown', 'mousedown', 'keydown', 'touchstart'].forEach(evt => {
+      window.addEventListener(evt, () => {
+        startPlayback();
+      });
+    });
+
+    let mouseX = window.innerWidth / 2;
+    let mouseY = window.innerHeight / 2;
+
+    function resize() {
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = window.innerWidth * dpr;
+      canvas.height = window.innerHeight * dpr;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    window.addEventListener('pointermove', (e) => {
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+    });
+
+    function draw() {
+      requestAnimationFrame(draw);
+
+      if (video.paused) {
+        video.play().catch(() => {});
+      }
+
+      if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+        return;
+      }
+
+      const dpr = window.devicePixelRatio || 1;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+
+      // vercel.vercel.vercel.app dynamic resizing
+      const vmin = Math.min(w, h);
+      const safeMouseY = Math.max(8, mouseY || (h / 2));
+      const tileWidth = Math.min(Math.max(8, safeMouseY), vmin);
+      const scale = tileWidth / video.videoWidth;
+      const tileHeight = video.videoHeight * scale;
+
+      const offsetX = mouseX || (w / 2);
+      const offsetY = (h - tileHeight) * 0.5;
+
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const pattern = ctx.createPattern(video, 'repeat');
+      if (pattern) {
+        const matrix = new DOMMatrix()
+          .translateSelf(offsetX, offsetY)
+          .scaleSelf(scale, scale);
+        pattern.setTransform(matrix);
+        ctx.fillStyle = pattern;
+        ctx.fillRect(0, 0, w, h);
+      }
+
+      ctx.restore();
+    }
+
+    requestAnimationFrame(draw);
+  </script>
+</body>
+</html>
