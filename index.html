@@ -33,43 +33,89 @@
     #audio {
       display: none;
     }
+    #autoplay-prompt {
+      display: none;
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(18, 18, 18, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 12px 24px;
+      border-radius: 999px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      z-index: 9999;
+      pointer-events: none;
+      animation: pulse 2s infinite ease-in-out;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.9; transform: translateX(-50%) scale(1); }
+      50% { opacity: 1; transform: translateX(-50%) scale(1.03); }
+    }
   </style>
 </head>
 <body>
   <!-- Video muted so frame decoding never pauses -->
   <video id="video" src="jensen-video-hd.mp4" autoplay loop muted playsinline webkit-playsinline></video>
   
-  <!-- Song plays automatically on loop -->
+  <!-- Song pre-trimmed to start directly at 20s with byte-0 delivery -->
   <audio id="audio" src="song_from_20s.mp3" autoplay loop preload="auto"></audio>
   
   <canvas id="canvas"></canvas>
+
+  <div id="autoplay-prompt">🔊 Click anywhere to start audio</div>
 
   <script>
     const video = document.getElementById('video');
     const audio = document.getElementById('audio');
     const canvas = document.getElementById('canvas');
+    const promptEl = document.getElementById('autoplay-prompt');
     const ctx = canvas.getContext('2d');
 
     audio.muted = false;
     audio.volume = 1.0;
 
-    function playMedia() {
+    let isAudioPlaying = false;
+
+    function startPlayback() {
       if (video.paused) {
         video.play().catch(() => {});
       }
-      if (audio.paused) {
-        audio.play().catch(() => {});
+
+      if (isAudioPlaying && !audio.paused) {
+        if (promptEl) promptEl.style.display = 'none';
+        return;
+      }
+
+      const p = audio.play();
+      if (p !== undefined) {
+        p.then(() => {
+          isAudioPlaying = true;
+          if (promptEl) promptEl.style.display = 'none';
+        }).catch((err) => {
+          // If browser Autoplay policy blocks unmuted audio on load, show helpful prompt
+          isAudioPlaying = false;
+          if (promptEl) promptEl.style.display = 'block';
+        });
       }
     }
 
-    // Play automatically on load
-    playMedia();
-    window.addEventListener('DOMContentLoaded', playMedia);
-    window.addEventListener('load', playMedia);
+    // Try starting automatically on page load
+    startPlayback();
+    window.addEventListener('DOMContentLoaded', startPlayback);
+    window.addEventListener('load', startPlayback);
 
-    // Also trigger on any movement/interaction seamlessly without any UI
-    const events = ['pointermove', 'mousemove', 'wheel', 'scroll', 'pointerdown', 'keydown', 'touchstart'];
-    events.forEach(evt => window.addEventListener(evt, playMedia, { passive: true }));
+    // Clicking or pressing anywhere activates audio instantly
+    ['pointerdown', 'mousedown', 'keydown', 'touchstart'].forEach(evt => {
+      window.addEventListener(evt, () => {
+        startPlayback();
+      });
+    });
 
     let mouseX = window.innerWidth / 2;
     let mouseY = window.innerHeight / 2;
